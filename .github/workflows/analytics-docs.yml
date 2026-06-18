@@ -21,12 +21,15 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/setup-python@v5
+      # Auth option A: set CLAUDE_CREDENTIALS secret (base64 of ~/.claude/.credentials.json)
+      # Auth option B: set ANTHROPIC_API_KEY secret
+      # See: https://github.com/YOUR_ORG/intelligent-doc-engine#authentication
+      - name: Set up engine + Claude auth
+        uses: YOUR_ORG/intelligent-doc-engine/.github/actions/setup-doc-engine@main
         with:
-          python-version: "3.11"
-
-      - name: Install intelligent-doc-engine
-        run: pip install "git+https://github.com/YOUR_ORG/intelligent-doc-engine.git@main"
+          engine_repo: YOUR_ORG/intelligent-doc-engine
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_credentials: ${{ secrets.CLAUDE_CREDENTIALS }}
 
       - name: Resolve PR number
         id: pr
@@ -39,7 +42,6 @@ jobs:
 
       - name: Generate analytics documentation
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           analytics-doc scan-pr \
