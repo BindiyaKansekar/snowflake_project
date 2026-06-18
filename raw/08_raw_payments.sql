@@ -1,0 +1,31 @@
+-- RAW Layer | Table: RAW.PAYMENTS
+-- Source: Payment gateway (Stripe webhook) | Load: Real-time via Snowpipe
+USE SCHEMA RETAIL_DW.RAW;
+
+CREATE TABLE IF NOT EXISTS PAYMENTS (
+    RAW_ID           NUMBER AUTOINCREMENT PRIMARY KEY,
+    SRC_PAYMENT_ID   VARCHAR(50),
+    SRC_ORDER_ID     VARCHAR(50),
+    PAYLOAD          VARIANT,
+    FILE_NAME        VARCHAR(500),
+    FILE_ROW_NUMBER  NUMBER,
+    LOAD_TIMESTAMP   TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    BATCH_ID         VARCHAR(100)
+);
+
+-- Snowpipe auto-ingest pipe for real-time payment events
+CREATE PIPE IF NOT EXISTS PAYMENTS_PIPE
+    AUTO_INGEST = TRUE
+    COMMENT = 'Auto-ingest Stripe payment webhook events'
+AS
+COPY INTO PAYMENTS (SRC_PAYMENT_ID, SRC_ORDER_ID, PAYLOAD, FILE_NAME, FILE_ROW_NUMBER)
+FROM (
+    SELECT
+        $1:payment_id::VARCHAR,
+        $1:order_id::VARCHAR,
+        $1,
+        METADATA$FILENAME,
+        METADATA$FILE_ROW_NUMBER
+    FROM @ORDERS_STAGE
+)
+FILE_FORMAT = (FORMAT_NAME = 'JSON_FORMAT');

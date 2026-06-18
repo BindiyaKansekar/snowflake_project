@@ -1,0 +1,55 @@
+# config.yaml
+# ===========
+# Configuration for the Energy Grid Monitor system.
+
+monitor:
+  poll_interval_seconds: 30
+  max_retries: 3
+  retry_backoff_seconds: 5
+
+thresholds:
+  voltage_variance_pct: 5.0       # Alert if voltage deviates more than ±5% from nominal
+  load_capacity_pct: 90.0         # Alert if load exceeds 90% of rated capacity
+  frequency_deviation_hz: 0.5     # Alert if frequency deviates more than ±0.5 Hz from nominal
+
+nodes:
+  - id: "node-substation-north"
+    endpoint: "192.168.10.11"
+    nominal_voltage_kv: 132.0
+    nominal_frequency_hz: 50.0
+    region: "north"
+  - id: "node-substation-south"
+    endpoint: "192.168.10.12"
+    nominal_voltage_kv: 132.0
+    nominal_frequency_hz: 50.0
+    region: "south"
+  - id: "node-distribution-east"
+    endpoint: "192.168.10.21"
+    nominal_voltage_kv: 11.0
+    nominal_frequency_hz: 50.0
+    region: "east"
+  - id: "node-distribution-west"
+    endpoint: "192.168.10.22"
+    nominal_voltage_kv: 11.0
+    nominal_frequency_hz: 50.0
+    region: "west"
+
+alerts:
+  email:
+    enabled: true
+    smtp_host: "smtp.example.com"
+    smtp_port: 587
+    from: "grid-monitor@example.com"
+    recipients:
+      - "ops-team@example.com"
+      - "on-call@example.com"
+    username: "grid-monitor@example.com"
+    password: "${EMAIL_PASSWORD}"      # Injected via environment variable
+
+  webhook:
+    enabled: true
+    url: "${ALERT_WEBHOOK_URL}"        # Injected via environment variable
+
+logging:
+  level: INFO
+  log_dir: logs

@@ -1,0 +1,36 @@
+-- GOLD Layer | Fact: GOLD.FACT_SALES
+-- Grain: one row per order | Keys to all dimensions
+USE SCHEMA RETAIL_DW.GOLD;
+
+CREATE OR REPLACE TABLE FACT_SALES AS
+SELECT
+    -- Surrogate key
+    o.ORDER_SK,
+    -- Dimension keys
+    TO_NUMBER(TO_CHAR(o.ORDER_DATE, 'YYYYMMDD'))    AS DATE_SK,
+    c.CUSTOMER_SK,
+    s.STORE_SK,
+    p.PROMOTION_SK,
+    -- Natural keys (for traceability)
+    o.ORDER_ID,
+    o.CUSTOMER_ID,
+    o.STORE_ID,
+    o.PROMOTION_ID,
+    o.CHANNEL,
+    o.ORDER_STATUS,
+    o.CURRENCY_CODE,
+    -- Measures
+    o.SUBTOTAL_AMOUNT,
+    o.DISCOUNT_AMOUNT,
+    o.TAX_AMOUNT,
+    o.SHIPPING_AMOUNT,
+    o.TOTAL_AMOUNT,
+    o.TOTAL_AMOUNT - o.DISCOUNT_AMOUNT              AS NET_REVENUE,
+    o.IS_FIRST_ORDER,
+    o.ORDER_DATE,
+    o.ORDER_TIMESTAMP,
+    CURRENT_TIMESTAMP()                             AS DW_REFRESHED_AT
+FROM SILVER.ORDERS o
+LEFT JOIN GOLD.DIM_CUSTOMERS  c ON o.CUSTOMER_ID  = c.CUSTOMER_ID  AND c.IS_CURRENT = TRUE
+LEFT JOIN GOLD.DIM_STORES     s ON o.STORE_ID     = s.STORE_ID
+LEFT JOIN GOLD.DIM_PROMOTIONS p ON o.PROMOTION_ID = p.PROMOTION_ID;

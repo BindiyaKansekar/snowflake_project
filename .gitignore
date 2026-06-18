@@ -1,0 +1,17 @@
+# Generated documentation output
+*.html
+*.docx
+*.md.bak
+
+# Python (setup scripts, energy-grid-monitor)
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# Secrets
+.env
+*.env.*
+credentials.json

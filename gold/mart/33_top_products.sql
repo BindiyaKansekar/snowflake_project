@@ -1,0 +1,37 @@
+-- GOLD Mart | GOLD.TOP_PRODUCTS
+-- Ranked product leaderboard by revenue, units, and margin
+USE SCHEMA RETAIL_DW.GOLD;
+
+CREATE OR REPLACE TABLE TOP_PRODUCTS AS
+SELECT
+    pp.PRODUCT_ID,
+    pp.PRODUCT_NAME,
+    pp.BRAND,
+    pp.CATEGORY_NAME,
+    pp.TOP_CATEGORY_NAME,
+    pp.UNIT_PRICE,
+    pp.LIST_MARGIN_PCT,
+    pp.TOTAL_UNITS_SOLD,
+    pp.ORDERS_WITH_PRODUCT,
+    pp.GROSS_REVENUE,
+    pp.NET_REVENUE,
+    pp.TOTAL_GROSS_PROFIT,
+    pp.AVG_REALIZED_MARGIN_PCT,
+    pp.REVIEW_COUNT,
+    pp.AVG_RATING,
+    pp.RETURN_RATE_PCT,
+    pp.REVENUE_RANK,
+    pp.UNITS_RANK,
+    RANK() OVER (ORDER BY pp.TOTAL_GROSS_PROFIT DESC)  AS PROFIT_RANK,
+    RANK() OVER (ORDER BY pp.AVG_RATING DESC)          AS RATING_RANK,
+    NTILE(4) OVER (ORDER BY pp.GROSS_REVENUE DESC)     AS REVENUE_QUARTILE,
+    -- Boston Matrix quadrant (growth proxy via return rate, share via revenue rank)
+    CASE
+        WHEN pp.REVENUE_RANK <= 50 AND pp.RETURN_RATE_PCT < 5  THEN 'STAR'
+        WHEN pp.REVENUE_RANK <= 50 AND pp.RETURN_RATE_PCT >= 5 THEN 'QUESTION_MARK'
+        WHEN pp.REVENUE_RANK > 50  AND pp.RETURN_RATE_PCT < 5  THEN 'CASH_COW'
+        ELSE 'DOG'
+    END                                                AS BCG_QUADRANT,
+    CURRENT_TIMESTAMP()                                AS DW_REFRESHED_AT
+FROM GOLD.PRODUCT_PERFORMANCE pp
+ORDER BY pp.REVENUE_RANK;

@@ -1,0 +1,32 @@
+-- RAW Layer | Table: RAW.CART_EVENTS
+-- Source: E-commerce platform events | Load: Real-time via Snowpipe
+USE SCHEMA RETAIL_DW.RAW;
+
+CREATE TABLE IF NOT EXISTS CART_EVENTS (
+    RAW_ID           NUMBER AUTOINCREMENT PRIMARY KEY,
+    SRC_SESSION_ID   VARCHAR(100),
+    SRC_CUSTOMER_ID  VARCHAR(50),
+    EVENT_TYPE       VARCHAR(50),   -- add_to_cart, remove_from_cart, checkout_started
+    PAYLOAD          VARIANT,
+    FILE_NAME        VARCHAR(500),
+    FILE_ROW_NUMBER  NUMBER,
+    LOAD_TIMESTAMP   TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    BATCH_ID         VARCHAR(100)
+);
+
+CREATE PIPE IF NOT EXISTS CART_EVENTS_PIPE
+    AUTO_INGEST = TRUE
+    COMMENT = 'Auto-ingest shopping cart events'
+AS
+COPY INTO CART_EVENTS (SRC_SESSION_ID, SRC_CUSTOMER_ID, EVENT_TYPE, PAYLOAD, FILE_NAME, FILE_ROW_NUMBER)
+FROM (
+    SELECT
+        $1:session_id::VARCHAR,
+        $1:customer_id::VARCHAR,
+        $1:event_type::VARCHAR,
+        $1,
+        METADATA$FILENAME,
+        METADATA$FILE_ROW_NUMBER
+    FROM @EVENTS_STAGE
+)
+FILE_FORMAT = (FORMAT_NAME = 'JSON_FORMAT');

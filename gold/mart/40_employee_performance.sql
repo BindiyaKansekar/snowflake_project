@@ -1,0 +1,33 @@
+-- GOLD Mart | GOLD.EMPLOYEE_PERFORMANCE
+-- Monthly sales associate KPIs
+USE SCHEMA RETAIL_DW.GOLD;
+
+CREATE OR REPLACE TABLE EMPLOYEE_PERFORMANCE AS
+SELECT
+    e.EMPLOYEE_ID,
+    e.FULL_NAME,
+    e.JOB_TITLE,
+    e.DEPARTMENT,
+    e.STORE_ID,
+    d.YEAR_NUMBER,
+    d.MONTH_NUMBER,
+    d.MONTH_NAME,
+    SUM(fes.ORDERS_TAKEN)                                          AS ORDERS_TAKEN,
+    SUM(fes.CUSTOMERS_SERVED)                                      AS CUSTOMERS_SERVED,
+    SUM(fes.TOTAL_SALES_AMOUNT)                                    AS TOTAL_SALES,
+    SUM(fes.TOTAL_DISCOUNTS_GIVEN)                                 AS TOTAL_DISCOUNTS_GIVEN,
+    AVG(fes.AVG_TRANSACTION_VALUE)                                 AS AVG_TRANSACTION_VALUE,
+    SUM(fes.TOTAL_DISCOUNTS_GIVEN) /
+        NULLIF(SUM(fes.TOTAL_SALES_AMOUNT), 0) * 100              AS DISCOUNT_RATE_PCT,
+    -- Rankings within store and period
+    RANK() OVER (PARTITION BY e.STORE_ID, d.YEAR_NUMBER, d.MONTH_NUMBER
+                 ORDER BY SUM(fes.TOTAL_SALES_AMOUNT) DESC)        AS STORE_SALES_RANK,
+    -- MoM comparison
+    LAG(SUM(fes.TOTAL_SALES_AMOUNT))
+        OVER (PARTITION BY e.EMPLOYEE_ID ORDER BY d.YEAR_NUMBER, d.MONTH_NUMBER) AS PREV_MONTH_SALES,
+    CURRENT_TIMESTAMP()                                            AS DW_REFRESHED_AT
+FROM GOLD.FACT_EMPLOYEE_SALES fes
+JOIN GOLD.DIM_EMPLOYEES  e ON fes.EMPLOYEE_SK = e.EMPLOYEE_SK
+JOIN GOLD.DIM_DATE       d ON fes.DATE_SK     = d.DATE_SK
+GROUP BY e.EMPLOYEE_ID, e.FULL_NAME, e.JOB_TITLE, e.DEPARTMENT, e.STORE_ID,
+         d.YEAR_NUMBER, d.MONTH_NUMBER, d.MONTH_NAME;

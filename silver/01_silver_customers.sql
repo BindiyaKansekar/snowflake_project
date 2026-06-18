@@ -1,0 +1,65 @@
+-- SILVER Layer | Table: SILVER.CUSTOMERS
+-- Cleaned, typed, deduplicated from RAW.CUSTOMERS
+-- SCD Type 2 pattern with IS_CURRENT flag
+USE SCHEMA RETAIL_DW.SILVER;
+
+CREATE TABLE IF NOT EXISTS CUSTOMERS (
+    CUSTOMER_SK         NUMBER AUTOINCREMENT PRIMARY KEY,
+    CUSTOMER_ID         VARCHAR(50)    NOT NULL,
+    FIRST_NAME          VARCHAR(100),
+    LAST_NAME           VARCHAR(100),
+    FULL_NAME           VARCHAR(200),
+    EMAIL               VARCHAR(254),
+    PHONE               VARCHAR(20),
+    DATE_OF_BIRTH       DATE,
+    GENDER              VARCHAR(10),
+    CUSTOMER_TIER       VARCHAR(20),   -- BRONZE, SILVER, GOLD, PLATINUM
+    REGISTRATION_DATE   DATE,
+    IS_ACTIVE           BOOLEAN        DEFAULT TRUE,
+    -- SCD2 fields
+    EFFECTIVE_FROM      TIMESTAMP_NTZ  DEFAULT CURRENT_TIMESTAMP(),
+    EFFECTIVE_TO        TIMESTAMP_NTZ  DEFAULT '9999-12-31'::TIMESTAMP_NTZ,
+    IS_CURRENT          BOOLEAN        DEFAULT TRUE,
+    -- Audit
+    SRC_LOAD_TIMESTAMP  TIMESTAMP_NTZ,
+    DW_CREATED_AT       TIMESTAMP_NTZ  DEFAULT CURRENT_TIMESTAMP(),
+    DW_UPDATED_AT       TIMESTAMP_NTZ  DEFAULT CURRENT_TIMESTAMP()
+);
+
+MERGE INTO SILVER.CUSTOMERS tgt
+USING (
+    SELECT DISTINCT
+        PAYLOAD:customer_id::VARCHAR(50)                           AS CUSTOMER_ID,
+        TRIM(PAYLOAD:first_name::VARCHAR(100))                     AS FIRST_NAME,
+        TRIM(PAYLOAD:last_name::VARCHAR(100))                      AS LAST_NAME,
+        TRIM(PAYLOAD:first_name::VARCHAR) || ' ' ||
+            TRIM(PAYLOAD:last_name::VARCHAR)                       AS FULL_NAME,
+        LOWER(TRIM(PAYLOAD:email::VARCHAR(254)))                   AS EMAIL,
+        REGEXP_REPLACE(PAYLOAD:phone::VARCHAR, '[^0-9+]', '')      AS PHONE,
+        TRY_TO_DATE(PAYLOAD:date_of_birth::VARCHAR, 'YYYY-MM-DD')  AS DATE_OF_BIRTH,
+        UPPER(PAYLOAD:gender::VARCHAR(10))                         AS GENDER,
+        COALESCE(UPPER(PAYLOAD:tier::VARCHAR(20)), 'BRONZE')       AS CUSTOMER_TIER,
+        TRY_TO_DATE(PAYLOAD:registration_date::VARCHAR)            AS REGISTRATION_DATE,
+        PAYLOAD:is_active::BOOLEAN                                 AS IS_ACTIVE,
+        LOAD_TIMESTAMP                                             AS SRC_LOAD_TIMESTAMP,
+        ROW_NUMBER() OVER (
+            PARTITION BY PAYLOAD:customer_id::VARCHAR
+            ORDER BY LOAD_TIMESTAMP DESC
+        )                                                          AS RN
+    FROM RAW.CUSTOMERS
+    WHERE PAYLOAD:customer_id IS NOT NULL
+) src ON (tgt.CUSTOMER_ID = src.CUSTOMER_ID AND tgt.IS_CURRENT = TRUE AND src.RN = 1)
+WHEN MATCHED AND (
+    tgt.EMAIL != src.EMAIL OR tgt.PHONE != src.PHONE OR
+    tgt.CUSTOMER_TIER != src.CUSTOMER_TIER OR tgt.IS_ACTIVE != src.IS_ACTIVE
+) THEN UPDATE SET
+    tgt.IS_CURRENT    = FALSE,
+    tgt.EFFECTIVE_TO  = CURRENT_TIMESTAMP(),
+    tgt.DW_UPDATED_AT = CURRENT_TIMESTAMP()
+WHEN NOT MATCHED AND src.RN = 1 THEN INSERT (
+    CUSTOMER_ID, FIRST_NAME, LAST_NAME, FULL_NAME, EMAIL, PHONE,
+    DATE_OF_BIRTH, GENDER, CUSTOMER_TIER, REGISTRATION_DATE, IS_ACTIVE, SRC_LOAD_TIMESTAMP
+) VALUES (
+    src.CUSTOMER_ID, src.FIRST_NAME, src.LAST_NAME, src.FULL_NAME, src.EMAIL, src.PHONE,
+    src.DATE_OF_BIRTH, src.GENDER, src.CUSTOMER_TIER, src.REGISTRATION_DATE, src.IS_ACTIVE, src.SRC_LOAD_TIMESTAMP
+);

@@ -1,0 +1,39 @@
+-- GOLD Mart | GOLD.PROMOTION_ROI
+-- Financial return on each promotion type and individual promo
+USE SCHEMA RETAIL_DW.GOLD;
+
+CREATE OR REPLACE TABLE PROMOTION_ROI AS
+SELECT
+    p.PROMOTION_ID,
+    p.PROMOTION_NAME,
+    p.PROMOTION_TYPE,
+    p.PROMO_CODE,
+    p.START_DATE,
+    p.END_DATE,
+    p.DISCOUNT_VALUE,
+    p.USAGE_LIMIT,
+    -- Usage
+    COUNT(DISTINCT fpu.ORDER_ID)                                 AS TIMES_USED,
+    COUNT(DISTINCT fpu.CUSTOMER_ID)                              AS UNIQUE_CUSTOMERS_USING,
+    COUNT(DISTINCT IFF(fpu.IS_FIRST_ORDER, fpu.CUSTOMER_ID, NULL)) AS NEW_CUSTOMERS_ACQUIRED,
+    -- Financials
+    SUM(fpu.SUBTOTAL_AMOUNT)                                     AS TOTAL_BASKET_VALUE,
+    SUM(fpu.ACTUAL_DISCOUNT_GIVEN)                               AS TOTAL_DISCOUNT_COST,
+    SUM(fpu.TOTAL_AMOUNT)                                        AS NET_REVENUE_AFTER_DISCOUNT,
+    AVG(fpu.EFFECTIVE_DISCOUNT_PCT)                              AS AVG_EFFECTIVE_DISCOUNT_PCT,
+    AVG(fpu.SUBTOTAL_AMOUNT)                                     AS AVG_BASKET_SIZE,
+    -- ROI metrics
+    SUM(fpu.TOTAL_AMOUNT) /
+        NULLIF(SUM(fpu.ACTUAL_DISCOUNT_GIVEN), 0)               AS REVENUE_PER_DISCOUNT_DOLLAR,
+    (SUM(fpu.TOTAL_AMOUNT) - SUM(fpu.ACTUAL_DISCOUNT_GIVEN)) /
+        NULLIF(SUM(fpu.ACTUAL_DISCOUNT_GIVEN), 0) * 100         AS PROMOTION_ROI_PCT,
+    -- Rank
+    RANK() OVER (ORDER BY
+        (SUM(fpu.TOTAL_AMOUNT) - SUM(fpu.ACTUAL_DISCOUNT_GIVEN)) /
+        NULLIF(SUM(fpu.ACTUAL_DISCOUNT_GIVEN), 0) DESC)         AS ROI_RANK,
+    CURRENT_TIMESTAMP()                                         AS DW_REFRESHED_AT
+FROM GOLD.DIM_PROMOTIONS        p
+LEFT JOIN GOLD.FACT_PROMOTIONS_USAGE fpu ON p.PROMOTION_ID = fpu.PROMOTION_ID
+LEFT JOIN GOLD.FACT_SALES            fs  ON fpu.ORDER_ID   = fs.ORDER_ID
+GROUP BY p.PROMOTION_ID, p.PROMOTION_NAME, p.PROMOTION_TYPE, p.PROMO_CODE,
+         p.START_DATE, p.END_DATE, p.DISCOUNT_VALUE, p.USAGE_LIMIT;

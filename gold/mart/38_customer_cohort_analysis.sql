@@ -1,0 +1,40 @@
+-- GOLD Mart | GOLD.CUSTOMER_COHORT_ANALYSIS
+-- Monthly retention cohorts tracking revenue and orders over time
+USE SCHEMA RETAIL_DW.GOLD;
+
+CREATE OR REPLACE TABLE CUSTOMER_COHORT_ANALYSIS AS
+WITH first_orders AS (
+    SELECT
+        CUSTOMER_ID,
+        DATE_TRUNC('MONTH', MIN(ORDER_DATE))  AS COHORT_MONTH,
+        MIN(ORDER_DATE)                       AS FIRST_ORDER_DATE
+    FROM SILVER.ORDERS
+    WHERE ORDER_STATUS NOT IN ('CANCELLED', 'RETURNED')
+    GROUP BY CUSTOMER_ID
+),
+order_activity AS (
+    SELECT
+        o.CUSTOMER_ID,
+        DATE_TRUNC('MONTH', o.ORDER_DATE)     AS ACTIVITY_MONTH,
+        SUM(o.TOTAL_AMOUNT)                   AS REVENUE,
+        COUNT(DISTINCT o.ORDER_ID)            AS ORDERS
+    FROM SILVER.ORDERS o
+    WHERE o.ORDER_STATUS NOT IN ('CANCELLED', 'RETURNED')
+    GROUP BY o.CUSTOMER_ID, DATE_TRUNC('MONTH', o.ORDER_DATE)
+)
+SELECT
+    fo.COHORT_MONTH,
+    oa.ACTIVITY_MONTH,
+    DATEDIFF('month', fo.COHORT_MONTH, oa.ACTIVITY_MONTH)           AS MONTHS_SINCE_FIRST_ORDER,
+    COUNT(DISTINCT fo.CUSTOMER_ID)                                   AS COHORT_SIZE,
+    COUNT(DISTINCT oa.CUSTOMER_ID)                                   AS ACTIVE_CUSTOMERS,
+    COUNT(DISTINCT oa.CUSTOMER_ID) /
+        NULLIF(COUNT(DISTINCT fo.CUSTOMER_ID), 0) * 100             AS RETENTION_RATE_PCT,
+    SUM(oa.REVENUE)                                                  AS COHORT_REVENUE,
+    SUM(oa.ORDERS)                                                   AS COHORT_ORDERS,
+    SUM(oa.REVENUE) / NULLIF(COUNT(DISTINCT oa.CUSTOMER_ID), 0)     AS REVENUE_PER_ACTIVE_CUSTOMER,
+    CURRENT_TIMESTAMP()                                              AS DW_REFRESHED_AT
+FROM first_orders    fo
+LEFT JOIN order_activity oa ON fo.CUSTOMER_ID = oa.CUSTOMER_ID
+GROUP BY fo.COHORT_MONTH, oa.ACTIVITY_MONTH
+ORDER BY fo.COHORT_MONTH, oa.ACTIVITY_MONTH;

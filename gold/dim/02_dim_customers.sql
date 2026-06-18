@@ -1,0 +1,40 @@
+-- GOLD Layer | Dimension: GOLD.DIM_CUSTOMERS
+-- Type 2 SCD customer dimension sourced from SILVER.CUSTOMERS
+USE SCHEMA RETAIL_DW.GOLD;
+
+CREATE OR REPLACE TABLE DIM_CUSTOMERS AS
+SELECT
+    CUSTOMER_SK,
+    CUSTOMER_ID,
+    FIRST_NAME,
+    LAST_NAME,
+    FULL_NAME,
+    EMAIL,
+    PHONE,
+    DATE_OF_BIRTH,
+    GENDER,
+    CUSTOMER_TIER,
+    REGISTRATION_DATE,
+    IS_ACTIVE,
+    EFFECTIVE_FROM,
+    EFFECTIVE_TO,
+    IS_CURRENT,
+    -- Derived attributes
+    DATEDIFF('year', DATE_OF_BIRTH, CURRENT_DATE())           AS AGE_YEARS,
+    CASE
+        WHEN DATEDIFF('year', DATE_OF_BIRTH, CURRENT_DATE()) < 25 THEN '18-24'
+        WHEN DATEDIFF('year', DATE_OF_BIRTH, CURRENT_DATE()) < 35 THEN '25-34'
+        WHEN DATEDIFF('year', DATE_OF_BIRTH, CURRENT_DATE()) < 45 THEN '35-44'
+        WHEN DATEDIFF('year', DATE_OF_BIRTH, CURRENT_DATE()) < 55 THEN '45-54'
+        ELSE '55+'
+    END                                                       AS AGE_BAND,
+    DATEDIFF('day', REGISTRATION_DATE, CURRENT_DATE())        AS DAYS_AS_CUSTOMER,
+    CASE
+        WHEN DATEDIFF('day', REGISTRATION_DATE, CURRENT_DATE()) <= 30  THEN 'NEW'
+        WHEN DATEDIFF('day', REGISTRATION_DATE, CURRENT_DATE()) <= 180 THEN 'DEVELOPING'
+        WHEN DATEDIFF('day', REGISTRATION_DATE, CURRENT_DATE()) <= 365 THEN 'ESTABLISHED'
+        ELSE 'VETERAN'
+    END                                                       AS TENURE_BAND,
+    YEAR(REGISTRATION_DATE)                                   AS REGISTRATION_YEAR,
+    CURRENT_TIMESTAMP()                                       AS DW_REFRESHED_AT
+FROM SILVER.CUSTOMERS;

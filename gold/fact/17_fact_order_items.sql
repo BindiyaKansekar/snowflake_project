@@ -1,0 +1,38 @@
+-- GOLD Layer | Fact: GOLD.FACT_ORDER_ITEMS
+-- Grain: one row per order line item (most granular sales fact)
+USE SCHEMA RETAIL_DW.GOLD;
+
+CREATE OR REPLACE TABLE FACT_ORDER_ITEMS AS
+SELECT
+    oi.ORDER_ITEM_SK,
+    TO_NUMBER(TO_CHAR(o.ORDER_DATE, 'YYYYMMDD'))     AS DATE_SK,
+    c.CUSTOMER_SK,
+    p.PRODUCT_SK,
+    s.STORE_SK,
+    promo.PROMOTION_SK,
+    oi.ORDER_ID,
+    oi.ITEM_ID,
+    oi.PRODUCT_ID,
+    o.CUSTOMER_ID,
+    o.STORE_ID,
+    o.CHANNEL,
+    o.ORDER_DATE,
+    oi.QUANTITY,
+    oi.UNIT_PRICE,
+    oi.DISCOUNT_AMOUNT,
+    oi.TAX_AMOUNT,
+    oi.LINE_TOTAL,
+    p.UNIT_COST,
+    oi.QUANTITY * p.UNIT_COST                         AS COGS,
+    oi.LINE_TOTAL - (oi.QUANTITY * p.UNIT_COST)       AS GROSS_PROFIT,
+    IFF(p.UNIT_COST > 0,
+        (oi.LINE_TOTAL - oi.QUANTITY * p.UNIT_COST) / oi.LINE_TOTAL * 100,
+        NULL)                                         AS MARGIN_PCT,
+    oi.RETURN_FLAG,
+    CURRENT_TIMESTAMP()                               AS DW_REFRESHED_AT
+FROM SILVER.ORDER_ITEMS   oi
+JOIN  SILVER.ORDERS       o    ON oi.ORDER_ID    = o.ORDER_ID
+LEFT JOIN GOLD.DIM_CUSTOMERS c ON o.CUSTOMER_ID  = c.CUSTOMER_ID AND c.IS_CURRENT = TRUE
+LEFT JOIN GOLD.DIM_PRODUCTS  p ON oi.PRODUCT_ID  = p.PRODUCT_ID
+LEFT JOIN GOLD.DIM_STORES    s ON o.STORE_ID     = s.STORE_ID
+LEFT JOIN GOLD.DIM_PROMOTIONS promo ON o.PROMOTION_ID = promo.PROMOTION_ID;

@@ -1,0 +1,57 @@
+-- SILVER Layer | Table: SILVER.STORES
+-- Cleaned store master with geo data
+USE SCHEMA RETAIL_DW.SILVER;
+
+CREATE TABLE IF NOT EXISTS STORES (
+    STORE_SK            NUMBER AUTOINCREMENT PRIMARY KEY,
+    STORE_ID            VARCHAR(50)   NOT NULL UNIQUE,
+    STORE_NAME          VARCHAR(200),
+    STORE_TYPE          VARCHAR(30),  -- FLAGSHIP, STANDARD, OUTLET, ONLINE
+    ADDRESS_LINE1       VARCHAR(300),
+    CITY                VARCHAR(100),
+    STATE_PROVINCE      VARCHAR(100),
+    POSTAL_CODE         VARCHAR(20),
+    COUNTRY_CODE        VARCHAR(2),
+    LATITUDE            FLOAT,
+    LONGITUDE           FLOAT,
+    TIMEZONE            VARCHAR(50),
+    OPENING_DATE        DATE,
+    CLOSING_DATE        DATE,
+    IS_ACTIVE           BOOLEAN       DEFAULT TRUE,
+    STORE_MANAGER_ID    VARCHAR(50),
+    SQUARE_FOOTAGE      NUMBER(10),
+    SRC_LOAD_TIMESTAMP  TIMESTAMP_NTZ,
+    DW_CREATED_AT       TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    DW_UPDATED_AT       TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
+MERGE INTO SILVER.STORES tgt
+USING (
+    SELECT
+        PAYLOAD:store_id::VARCHAR(50)                                AS STORE_ID,
+        TRIM(PAYLOAD:name::VARCHAR(200))                             AS STORE_NAME,
+        UPPER(COALESCE(PAYLOAD:type::VARCHAR(30), 'STANDARD'))       AS STORE_TYPE,
+        PAYLOAD:address_line1::VARCHAR(300)                          AS ADDRESS_LINE1,
+        PAYLOAD:city::VARCHAR(100)                                   AS CITY,
+        PAYLOAD:state::VARCHAR(100)                                  AS STATE_PROVINCE,
+        PAYLOAD:postal_code::VARCHAR(20)                             AS POSTAL_CODE,
+        UPPER(PAYLOAD:country_code::VARCHAR(2))                      AS COUNTRY_CODE,
+        TRY_TO_DOUBLE(PAYLOAD:latitude::VARCHAR)                     AS LATITUDE,
+        TRY_TO_DOUBLE(PAYLOAD:longitude::VARCHAR)                    AS LONGITUDE,
+        PAYLOAD:timezone::VARCHAR(50)                                AS TIMEZONE,
+        TRY_TO_DATE(PAYLOAD:opening_date::VARCHAR)                   AS OPENING_DATE,
+        TRY_TO_DATE(PAYLOAD:closing_date::VARCHAR)                   AS CLOSING_DATE,
+        COALESCE(PAYLOAD:is_active::BOOLEAN, TRUE)                   AS IS_ACTIVE,
+        PAYLOAD:manager_id::VARCHAR(50)                              AS STORE_MANAGER_ID,
+        TRY_TO_NUMBER(PAYLOAD:sq_footage::VARCHAR)                   AS SQUARE_FOOTAGE,
+        LOAD_TIMESTAMP                                               AS SRC_LOAD_TIMESTAMP,
+        ROW_NUMBER() OVER (PARTITION BY PAYLOAD:store_id::VARCHAR ORDER BY LOAD_TIMESTAMP DESC) AS RN
+    FROM RAW.STORES
+    WHERE PAYLOAD:store_id IS NOT NULL
+) src ON (tgt.STORE_ID = src.STORE_ID AND src.RN = 1)
+WHEN MATCHED THEN UPDATE SET
+    tgt.IS_ACTIVE = src.IS_ACTIVE, tgt.STORE_MANAGER_ID = src.STORE_MANAGER_ID, tgt.DW_UPDATED_AT = CURRENT_TIMESTAMP()
+WHEN NOT MATCHED AND src.RN = 1 THEN INSERT
+    (STORE_ID, STORE_NAME, STORE_TYPE, ADDRESS_LINE1, CITY, STATE_PROVINCE, POSTAL_CODE, COUNTRY_CODE, LATITUDE, LONGITUDE, TIMEZONE, OPENING_DATE, CLOSING_DATE, IS_ACTIVE, STORE_MANAGER_ID, SQUARE_FOOTAGE, SRC_LOAD_TIMESTAMP)
+VALUES
+    (src.STORE_ID, src.STORE_NAME, src.STORE_TYPE, src.ADDRESS_LINE1, src.CITY, src.STATE_PROVINCE, src.POSTAL_CODE, src.COUNTRY_CODE, src.LATITUDE, src.LONGITUDE, src.TIMEZONE, src.OPENING_DATE, src.CLOSING_DATE, src.IS_ACTIVE, src.STORE_MANAGER_ID, src.SQUARE_FOOTAGE, src.SRC_LOAD_TIMESTAMP);
