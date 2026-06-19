@@ -70,7 +70,7 @@ jobs:
 
           cp "pr-${PR}-docs.html" "_gh_pages/pr-${PR}-docs.html"
           cd _gh_pages
-          git add "pr-${PR}-docs.html"
+          git add -f "pr-${PR}-docs.html"
           git commit -m "docs: PR #${PR} analytics report [skip ci]" || echo "No changes"
           git push origin gh-pages
 
