@@ -19,12 +19,9 @@ jobs:
     environment: CLAUDE_CREDENTIALS
     permissions:
       pull-requests: write
-      contents: read
+      contents: write
 
     steps:
-      # Auth option A: set CLAUDE_CREDENTIALS secret (base64 of ~/.claude/.credentials.json)
-      # Auth option B: set ANTHROPIC_API_KEY secret
-      # See: https://github.com/BindiyaKansekar/intelligent-doc-engine#authentication
       - name: Set up engine + Claude auth
         uses: BindiyaKansekar/intelligent-doc-engine/.github/actions/setup-doc-engine@master
         with:
@@ -54,30 +51,44 @@ jobs:
             --output "pr-${{ steps.pr.outputs.number }}-docs.md" \
             --also-html "pr-${{ steps.pr.outputs.number }}-docs.html"
 
-      - name: Upload docs artifact
-        id: upload
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: analytics-pr-docs-${{ steps.pr.outputs.number }}
-          path: "pr-*-docs.*"
-          retention-days: 30
-
-      - name: Append artifact link to docs
-        if: steps.upload.outputs.artifact-url != ''
+      - name: Publish HTML to GitHub Pages
+        id: pages
         env:
-          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ steps.pr.outputs.number }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
-          echo "" >> "pr-${PR}-docs.md"
-          echo "---" >> "pr-${PR}-docs.md"
-          echo "> 📊 **[View Interactive Lineage Report](${ARTIFACT_URL})** — Download the HTML report with interactive data lineage diagram" >> "pr-${PR}-docs.md"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Clone gh-pages branch
+          git clone --branch gh-pages --depth 1 \
+            "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" \
+            _gh_pages
+
+          cp "pr-${PR}-docs.html" "_gh_pages/pr-${PR}-docs.html"
+          cd _gh_pages
+          git add "pr-${PR}-docs.html"
+          git commit -m "docs: PR #${PR} analytics report [skip ci]" || echo "No changes"
+          git push origin gh-pages
+
+          PAGES_URL="https://${OWNER}.github.io/${REPO_NAME}/pr-${PR}-docs.html"
+          echo "url=${PAGES_URL}" >> $GITHUB_OUTPUT
+          echo "Published: ${PAGES_URL}"
 
       - name: Post documentation as PR comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PAGES_URL: ${{ steps.pages.outputs.url }}
         run: |
           PR="${{ steps.pr.outputs.number }}"
-          [ -f "pr-${PR}-docs.md" ] && gh pr comment "$PR" \
+          # Append live Pages link before posting
+          echo "" >> "pr-${PR}-docs.md"
+          echo "---" >> "pr-${PR}-docs.md"
+          echo "> 📊 **[View Interactive Lineage Report](${PAGES_URL})** — Opens directly in browser with interactive data lineage diagram" >> "pr-${PR}-docs.md"
+
+          gh pr comment "$PR" \
             --repo "${{ github.repository }}" \
             --body-file "pr-${PR}-docs.md"
