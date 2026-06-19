@@ -47,15 +47,16 @@ SELECT
     IFF(os.CUSTOMER_LIFESPAN_DAYS > 0,
         os.TOTAL_ORDERS / (os.CUSTOMER_LIFESPAN_DAYS / 365.0),
         os.TOTAL_ORDERS)                                     AS ORDERS_PER_YEAR,
-    -- Simple projected CLV (3-year): avg_order * frequency * 3
+    -- Projected CLV (5-year): avg_order * annualised frequency * 5
     os.AVG_ORDER_VALUE *
         IFF(os.CUSTOMER_LIFESPAN_DAYS > 0,
             os.TOTAL_ORDERS / (os.CUSTOMER_LIFESPAN_DAYS / 365.0),
-            os.TOTAL_ORDERS) * 3                             AS PROJECTED_CLV_3YR,
-    -- Churn risk
+            os.TOTAL_ORDERS) * 5                             AS PROJECTED_CLV_5YR,
+    -- Churn risk (4-band: more granular than previous 3-band)
     CASE
         WHEN os.DAYS_SINCE_LAST_ORDER <= 30  THEN 'LOW'
-        WHEN os.DAYS_SINCE_LAST_ORDER <= 90  THEN 'MEDIUM'
+        WHEN os.DAYS_SINCE_LAST_ORDER <= 60  THEN 'MEDIUM'
+        WHEN os.DAYS_SINCE_LAST_ORDER <= 120 THEN 'MEDIUM_HIGH'
         WHEN os.DAYS_SINCE_LAST_ORDER <= 180 THEN 'HIGH'
         ELSE 'CHURNED'
     END                                                      AS CHURN_RISK,
