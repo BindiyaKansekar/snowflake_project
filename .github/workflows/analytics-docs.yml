@@ -11,6 +11,14 @@ on:
         description: "PR number to document"
         required: true
         type: number
+      scope:
+        description: "Documentation scope"
+        required: true
+        type: choice
+        options:
+          - "PR changes only"
+          - "Full repository"
+        default: "PR changes only"
 
 jobs:
   generate-docs:
@@ -30,6 +38,10 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_credentials: ${{ secrets.CLAUDE_CREDENTIALS }}
 
+      - name: Checkout repository (full repo scan only)
+        if: github.event.inputs.scope == 'Full repository'
+        uses: actions/checkout@v4
+
       - name: Resolve PR number
         id: pr
         run: |
@@ -43,13 +55,25 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          analytics-doc scan-pr \
-            --provider github \
-            --repo "${{ github.repository }}" \
-            --pr "${{ steps.pr.outputs.number }}" \
-            --type snowflake \
-            --output "pr-${{ steps.pr.outputs.number }}-docs.md" \
-            --also-html "pr-${{ steps.pr.outputs.number }}-docs.html"
+          PR="${{ steps.pr.outputs.number }}"
+          SCOPE="${{ github.event.inputs.scope }}"
+
+          if [ "$SCOPE" = "Full repository" ]; then
+            analytics-doc scan-dir \
+              --path . \
+              --type snowflake \
+              --output "pr-${PR}-docs.md" \
+              --also-html "pr-${PR}-docs.html" \
+              --title "Full Repository — Snowflake SQL"
+          else
+            analytics-doc scan-pr \
+              --provider github \
+              --repo "${{ github.repository }}" \
+              --pr "${PR}" \
+              --type snowflake \
+              --output "pr-${PR}-docs.md" \
+              --also-html "pr-${PR}-docs.html"
+          fi
 
       - name: Publish HTML to GitHub Pages
         id: pages
@@ -63,7 +87,6 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Clone gh-pages branch
           git clone --branch gh-pages --depth 1 \
             "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" \
             _gh_pages
@@ -82,12 +105,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PAGES_URL: ${{ steps.pages.outputs.url }}
+          SCOPE: ${{ github.event.inputs.scope }}
         run: |
           PR="${{ steps.pr.outputs.number }}"
-          # Append live Pages link before posting
+          SCOPE_LABEL="${SCOPE:-PR changes only}"
+
           echo "" >> "pr-${PR}-docs.md"
           echo "---" >> "pr-${PR}-docs.md"
-          echo "> 📊 **[View Interactive Lineage Report](${PAGES_URL})** — Opens directly in browser with interactive data lineage diagram" >> "pr-${PR}-docs.md"
+          echo "> 📊 **[View Interactive Lineage Report](${PAGES_URL})** — ${SCOPE_LABEL} · Opens directly in browser" >> "pr-${PR}-docs.md"
 
           gh pr comment "$PR" \
             --repo "${{ github.repository }}" \
