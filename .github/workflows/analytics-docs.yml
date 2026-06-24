@@ -103,7 +103,7 @@ jobs:
           echo "url=${PAGES_URL}" >> $GITHUB_OUTPUT
           echo "Published: ${PAGES_URL}"
 
-      - name: Post documentation as PR comment
+      - name: Post link as PR comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PAGES_URL: ${{ steps.pages.outputs.url }}
@@ -111,11 +111,6 @@ jobs:
         run: |
           PR="${{ steps.pr.outputs.number }}"
           SCOPE_LABEL="${SCOPE:-PR changes only}"
-
-          echo "" >> "pr-${PR}-docs.md"
-          echo "---" >> "pr-${PR}-docs.md"
-          echo "> 📊 **[View Interactive Lineage Report](${PAGES_URL})** — ${SCOPE_LABEL} · Opens directly in browser" >> "pr-${PR}-docs.md"
-
           gh pr comment "$PR" \
             --repo "${{ github.repository }}" \
-            --body-file "pr-${PR}-docs.md"
+            --body "> 📊 **[View Interactive Lineage Report](${PAGES_URL})** — ${SCOPE_LABEL} · Opens directly in browser"
