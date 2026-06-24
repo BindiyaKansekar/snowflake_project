@@ -7,6 +7,10 @@ on:
       - "**/*.sql"
   workflow_dispatch:
     inputs:
+      pr_number:
+        description: "PR number to document"
+        required: true
+        type: number
       scope:
         description: "Documentation scope"
         required: true
@@ -15,10 +19,6 @@ on:
           - "PR changes only"
           - "Full repository"
         default: "PR changes only"
-      pr_number:
-        description: "PR number (required for 'PR changes only')"
-        required: false
-        type: string
 
 jobs:
   generate-docs:
@@ -38,58 +38,61 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_credentials: ${{ secrets.CLAUDE_CREDENTIALS }}
 
-      - name: Checkout repository (full repo scan only)
+      - name: Resolve PR number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "number=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository (full repo scan)
         if: github.event.inputs.scope == 'Full repository'
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Generate analytics documentation
-        id: gen
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          PR="${{ steps.pr.outputs.number }}"
           SCOPE="${{ github.event.inputs.scope }}"
-          PR_OUT=""
 
           if [ "$SCOPE" = "Full repository" ]; then
-            OUT_BASE="repo-docs"
             analytics-doc scan-dir \
-              --path . \
+              --path "$GITHUB_WORKSPACE" \
               --type snowflake \
-              --output "${OUT_BASE}.md" \
-              --also-html "${OUT_BASE}.html" \
-              --also-docx "${OUT_BASE}.docx" \
-              --title "Full Repository — Snowflake SQL"
+              --output "pr-${PR}-docs.md" \
+              --also-html "pr-${PR}-docs.html" \
+              --also-docx "pr-${PR}-docs.docx" \
+              --title "Full Repository — Snowflake SQL (PR #${PR})"
           else
-            PR="${{ github.event.inputs.pr_number || github.event.pull_request.number }}"
-            OUT_BASE="pr-${PR}-docs"
             analytics-doc scan-pr \
               --provider github \
               --repo "${{ github.repository }}" \
               --pr "${PR}" \
               --type snowflake \
-              --output "${OUT_BASE}.md" \
-              --also-html "${OUT_BASE}.html" \
-              --also-docx "${OUT_BASE}.docx"
-            PR_OUT="${PR}"
+              --output "pr-${PR}-docs.md" \
+              --also-html "pr-${PR}-docs.html" \
+              --also-docx "pr-${PR}-docs.docx"
           fi
-
-          echo "out_base=${OUT_BASE}" >> $GITHUB_OUTPUT
-          echo "pr=${PR_OUT}" >> $GITHUB_OUTPUT
 
       - name: Upload docs artifact
         id: upload
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: analytics-docs-${{ steps.gen.outputs.out_base }}
-          path: "${{ steps.gen.outputs.out_base }}.*"
+          name: analytics-pr-docs-${{ steps.pr.outputs.number }}
+          path: "pr-*-docs.*"
           retention-days: 30
 
       - name: Publish HTML to GitHub Pages
         id: pages
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OUT_BASE: ${{ steps.gen.outputs.out_base }}
+          PR: ${{ steps.pr.outputs.number }}
           REPO: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
@@ -111,34 +114,23 @@ jobs:
             cd ..
           fi
 
-          cp "${OUT_BASE}.html" "_gh_pages/${OUT_BASE}.html"
+          cp "pr-${PR}-docs.html" "_gh_pages/pr-${PR}-docs.html"
           cd _gh_pages
-          git add -f "${OUT_BASE}.html"
-          git commit -m "docs: ${OUT_BASE} analytics report [skip ci]" || echo "No changes"
+          git add -f "pr-${PR}-docs.html"
+          git commit -m "docs: PR #${PR} analytics report [skip ci]" || echo "No changes"
           git push origin gh-pages
 
-          PAGES_URL="https://${OWNER}.github.io/${REPO_NAME}/${OUT_BASE}.html"
+          PAGES_URL="https://${OWNER}.github.io/${REPO_NAME}/pr-${PR}-docs.html"
           echo "url=${PAGES_URL}" >> $GITHUB_OUTPUT
 
       - name: Post link as PR comment
-        if: github.event.inputs.scope != 'Full repository'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PAGES_URL: ${{ steps.pages.outputs.url }}
-          PR: ${{ steps.gen.outputs.pr }}
-        run: |
-          gh pr comment "${PR}" \
-            --repo "${{ github.repository }}" \
-            --body "> 📊 **[View Interactive Lineage Report](${PAGES_URL})** — Opens directly in browser"
-
-      - name: Write job summary
-        if: always()
-        env:
-          PAGES_URL: ${{ steps.pages.outputs.url }}
-          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
           SCOPE: ${{ github.event.inputs.scope }}
         run: |
+          PR="${{ steps.pr.outputs.number }}"
           SCOPE_LABEL="${SCOPE:-PR changes only}"
-          echo "## 📊 Analytics Documentation — ${SCOPE_LABEL}" >> $GITHUB_STEP_SUMMARY
-          [ -n "${PAGES_URL}" ] && echo "- **[View Interactive Lineage Report](${PAGES_URL})**" >> $GITHUB_STEP_SUMMARY || true
-          [ -n "${ARTIFACT_URL}" ] && echo "- **[Download All Docs](${ARTIFACT_URL})** (.md · .html · .docx)" >> $GITHUB_STEP_SUMMARY || true
+          gh pr comment "${PR}" \
+            --repo "${{ github.repository }}" \
+            --body "> 📊 **[View Interactive Lineage Report](${PAGES_URL})** — ${SCOPE_LABEL} · Opens directly in browser"
