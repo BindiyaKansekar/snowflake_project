@@ -64,6 +64,7 @@ jobs:
               --type snowflake \
               --output "pr-${PR}-docs.md" \
               --also-html "pr-${PR}-docs.html" \
+              --also-docx "pr-${PR}-docs.docx" \
               --title "Full Repository — Snowflake SQL"
           else
             analytics-doc scan-pr \
@@ -72,7 +73,8 @@ jobs:
               --pr "${PR}" \
               --type snowflake \
               --output "pr-${PR}-docs.md" \
-              --also-html "pr-${PR}-docs.html"
+              --also-html "pr-${PR}-docs.html" \
+              --also-docx "pr-${PR}-docs.docx"
           fi
 
       - name: Publish HTML to GitHub Pages
