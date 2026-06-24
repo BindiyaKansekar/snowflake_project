@@ -115,22 +115,26 @@ jobs:
           fi
 
           cp "pr-${PR}-docs.html" "_gh_pages/pr-${PR}-docs.html"
+          cp "pr-${PR}-docs.docx" "_gh_pages/pr-${PR}-docs.docx"
           cd _gh_pages
-          git add -f "pr-${PR}-docs.html"
+          git add -f "pr-${PR}-docs.html" "pr-${PR}-docs.docx"
           git commit -m "docs: PR #${PR} analytics report [skip ci]" || echo "No changes"
           git push origin gh-pages
 
-          PAGES_URL="https://${OWNER}.github.io/${REPO_NAME}/pr-${PR}-docs.html"
-          echo "url=${PAGES_URL}" >> $GITHUB_OUTPUT
+          BASE_URL="https://${OWNER}.github.io/${REPO_NAME}"
+          echo "html_url=${BASE_URL}/pr-${PR}-docs.html" >> $GITHUB_OUTPUT
+          echo "docx_url=${BASE_URL}/pr-${PR}-docs.docx" >> $GITHUB_OUTPUT
 
       - name: Post link as PR comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PAGES_URL: ${{ steps.pages.outputs.url }}
+          HTML_URL: ${{ steps.pages.outputs.html_url }}
+          DOCX_URL: ${{ steps.pages.outputs.docx_url }}
           SCOPE: ${{ github.event.inputs.scope }}
         run: |
           PR="${{ steps.pr.outputs.number }}"
           SCOPE_LABEL="${SCOPE:-PR changes only}"
           gh pr comment "${PR}" \
             --repo "${{ github.repository }}" \
-            --body "> 📊 **[View Interactive Lineage Report](${PAGES_URL})** — ${SCOPE_LABEL} · Opens directly in browser"
+            --body "> 📊 **[View Interactive Lineage Report](${HTML_URL})** — ${SCOPE_LABEL} · Opens directly in browser
+> 📄 **[Download Word Document](${DOCX_URL})** — Full documentation as .docx"
