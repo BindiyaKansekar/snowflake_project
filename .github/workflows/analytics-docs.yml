@@ -58,6 +58,7 @@ jobs:
       - name: Generate analytics documentation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANALYTICS_DOC_MODEL: claude-haiku-4-5-20251001
         run: |
           PR="${{ steps.pr.outputs.number }}"
           SCOPE="${{ github.event.inputs.scope }}"
