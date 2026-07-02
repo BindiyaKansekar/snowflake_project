@@ -36,5 +36,13 @@ SELECT
         ELSE 'VETERAN'
     END                                                       AS TENURE_BAND,
     YEAR(REGISTRATION_DATE)                                   AS REGISTRATION_YEAR,
+    -- Loyalty enrichment
+    LOYALTY_SCORE,
+    CASE
+        WHEN LOYALTY_SCORE >= 500 THEN 'ELITE'
+        WHEN LOYALTY_SCORE >= 200 THEN 'GOLD'
+        WHEN LOYALTY_SCORE >= 50  THEN 'SILVER'
+        ELSE 'STANDARD'
+    END                                                       AS LOYALTY_TIER,
     CURRENT_TIMESTAMP()                                       AS DW_REFRESHED_AT
 FROM SILVER.CUSTOMERS;
